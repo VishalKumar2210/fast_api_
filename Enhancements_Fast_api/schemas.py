@@ -12,7 +12,7 @@ class OurBaseModel(BaseModel):
 class PokemonPostPutInputSchema(BaseModel):
     name: str = Field(min_length=2, max_length=30)
     type_1: str
-    type_2: Optional[str] = None
+    type_2: str
     total: int
     hp: int
     attack: int

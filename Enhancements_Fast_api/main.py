@@ -4,7 +4,7 @@ from sqlalchemy import func, asc, desc
 import requests
 from database import SessionLocal, engine
 from fastapi import Query
-from typing import Optional, List
+from typing import Optional, List, Literal
 
 import models
 from schemas import (
@@ -26,17 +26,6 @@ def get_db():
         db.close()
 
 
-# Routes
-@app.get(
-    "/pokemon_all",
-    response_model=List[PokemonGetOutputSchema],
-    status_code=status.HTTP_200_OK,
-)
-def get_all_pokemon(db: Session = Depends(get_db)):
-    getAllPokemon = db.query(models.PokemonData).all()
-    return getAllPokemon
-
-
 @app.get(
     "/pokemon/{pokemon_id}",
     response_model=PokemonGetOutputSchema,
@@ -46,12 +35,11 @@ def get_Pokemon_By_Id(pokemon_id: int, db: Session = Depends(get_db)):
     getSinglePokemon = (
         db.query(models.PokemonData).filter(models.PokemonData.id == pokemon_id).first()
     )
-    if getSinglePokemon:
-        return getSinglePokemon
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Pokemon not found.."
-        )
+    
+    if not getSinglePokemon:
+        raise HTTPException("Pokemon not found..")
+
+    return getSinglePokemon
 
 
 @app.post(
@@ -82,7 +70,6 @@ def add_Pokemon(pokemon: PokemonPostPutInputSchema, db: Session = Depends(get_db
     )
     db.add(newPokemon)
     db.commit()
-    db.refresh(newPokemon)
     return newPokemon
 
 
@@ -156,16 +143,12 @@ def delete_Pokemon(pokemon_id: int, db: Session = Depends(get_db)):
     return None
 
 
-@app.post("/pokemon/")
+@app.post("/pokemon/load")
 def fetch_and_store(db: Session = Depends(get_db)):
     response = requests.get("https://coralvanda.github.io/pokemon_data.json")
     data = response.json()
 
     print(f"Data fetched: {len(data)} entries")
-
-    # Fetch the current max ID in the database
-    max_id = db.query(func.max(models.PokemonData.id)).scalar() or 0
-    current_id = max_id + 1
 
     # Prepare the bulk data mapping
     pokemon_list = []
@@ -210,7 +193,7 @@ def fetch_and_store(db: Session = Depends(get_db)):
 )
 def get_all_pokemon(
     db: Session = Depends(get_db),
-    sort_order: Optional[str] = Query(
+    sort_order: Literal["asc", "desc"]= Query(
         "asc", description="Order by Ascending or Descending (asc/desc)"
     ),
     search_column: Optional[str] = Query("name", description="Column to search in"),
