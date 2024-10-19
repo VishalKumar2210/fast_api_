@@ -1,5 +1,6 @@
 from database import Base, engine
-from sqlalchemy import Column, Integer, String, TIMESTAMP, Boolean, text
+from sqlalchemy import Column, Integer, String, TIMESTAMP, Boolean, text, Enum
+import enum
 
 
 def create_tables():
@@ -21,4 +22,20 @@ class PokemonData(Base):
     sp_def = Column(Integer, nullable=False)
     speed = Column(Integer, nullable=False)
     generation = Column(Integer, nullable=False)
-    legendary = Column(Boolean, nullable=False)  
+    legendary = Column(Boolean, nullable=False)
+
+
+class UserRole(str, enum.Enum):
+    admin = "admin"
+    user = "user"
+    moderator = "moderator"
+    # all = admin, user
+
+
+class User(Base):
+    __tablename__ = 'users'
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True, nullable=False)
+    hashed_password = Column(String, nullable=False)
+    role = Column(Enum(UserRole), default=UserRole.user, nullable=False)
