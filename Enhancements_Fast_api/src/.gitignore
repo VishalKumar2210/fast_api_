@@ -1,0 +1,12 @@
+# Ignore virtual environments
+../../venv/
+
+# Ignore Python bytecode and cache files
+__pycache__/
+*.pyc
+
+# Other common files to ignore
+*.v
+*.iml
+.pytest_cache/
+.idea/
