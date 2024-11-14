@@ -1,82 +1,69 @@
-from fastapi import FastAPI, status, HTTPException, Depends
-from sqlalchemy.orm import Session
-from sqlalchemy import func, asc, desc
+from typing import Annotated, List, Literal, Optional
+
 import requests
-from database import SessionLocal, engine
-from fastapi import Query
-from typing import Optional, List, Literal
-
-import models
-from schemas import (
-    PokemonPostPutInputSchema,
-    PokemonPatchInputSchema,
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import asc, desc
+from sqlalchemy.orm import Session
+from src.app.auth.auth import get_current_user, role_checker
+from src.app.auth.auth import router as auth_router
+from src.app.auth.models import UserRole
+from src.app.database.database import get_db
+from src.app.pokemon import models
+from src.app.pokemon.schemas import (
     PokemonGetOutputSchema,
+    PokemonPatchInputSchema,
     PokemonPostPatchPutOutputSchema,
+    PokemonPostPutInputSchema,
 )
-from typing import List
 
-app = FastAPI()
+# FastAPI application initialization
+router = APIRouter()
 
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+router.include_router(auth_router)
+user_dependency = Annotated[dict, Depends(get_current_user)]
 
 
-@app.get(
+@router.get(
     "/pokemon/{pokemon_id}",
     response_model=PokemonGetOutputSchema,
     status_code=status.HTTP_200_OK,
+    dependencies=[
+        Depends(role_checker([UserRole.admin, UserRole.user, UserRole.moderator]))
+    ],
 )
 def get_Pokemon_By_Id(pokemon_id: int, db: Session = Depends(get_db)):
     getSinglePokemon = (
         db.query(models.PokemonData).filter(models.PokemonData.id == pokemon_id).first()
     )
-    
+
     if not getSinglePokemon:
-        raise HTTPException("Pokemon not found..")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Pokemon not found."
+        )
 
     return getSinglePokemon
 
 
-@app.post(
+@router.post(
     "/pokemon",
     response_model=PokemonPostPatchPutOutputSchema,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(role_checker([UserRole.admin]))],
 )
 def add_Pokemon(pokemon: PokemonPostPutInputSchema, db: Session = Depends(get_db)):
-    max_id_obj = (
-        db.query(models.PokemonData.id).order_by(models.PokemonData.id.desc()).first()
-    )
-    new_id = max_id_obj[0] + 1 if max_id_obj else 1  # If no records, start with id=1
-
-    newPokemon = models.PokemonData(
-        id=new_id,
-        name=pokemon.name,
-        type_1=pokemon.type_1,
-        type_2=pokemon.type_2,
-        total=pokemon.total,
-        hp=pokemon.hp,
-        attack=pokemon.attack,
-        defense=pokemon.defense,
-        sp_atk=pokemon.sp_atk,
-        sp_def=pokemon.sp_def,
-        speed=pokemon.speed,
-        generation=pokemon.generation,
-        legendary=pokemon.legendary,
-    )
+    newPokemon = models.PokemonData(**pokemon.dict())
     db.add(newPokemon)
     db.commit()
+    db.refresh(newPokemon)  # This will populate the autoincremented id
+
     return newPokemon
 
 
-@app.put(
+@router.put(
     "/pokemon/{pokemon_id}",
     response_model=PokemonPostPatchPutOutputSchema,
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(role_checker([UserRole.admin]))],
 )
 def update_Pokemon(
     pokemon_id: int, pokemon: PokemonPostPutInputSchema, db: Session = Depends(get_db)
@@ -90,24 +77,19 @@ def update_Pokemon(
             detail="Pokemon with this id does not exist.",
         )
 
-    find_pokemon.name = pokemon.name
-    find_pokemon.type_1 = pokemon.type_1
-    find_pokemon.type_2 = pokemon.type_2
-    find_pokemon.total = pokemon.total
-    find_pokemon.hp = pokemon.hp
-    find_pokemon.attack = pokemon.attack
-    find_pokemon.defense = pokemon.defense
-    find_pokemon.sp_atk = pokemon.sp_atk
-    find_pokemon.sp_def = pokemon.sp_def
-    find_pokemon.speed = pokemon.speed
-    find_pokemon.generation = pokemon.generation
-    find_pokemon.legendary = pokemon.legendary
+    for key, value in pokemon.dict().items():
+        setattr(find_pokemon, key, value)
 
     db.commit()
+    db.refresh(find_pokemon)
     return find_pokemon
 
 
-@app.patch("/pokemon/{pokemon_id}", response_model=PokemonPostPatchPutOutputSchema)
+@router.patch(
+    "/pokemon/{pokemon_id}",
+    response_model=PokemonPostPatchPutOutputSchema,
+    dependencies=[Depends(role_checker([UserRole.admin]))],
+)
 def update_Pokemon_Patch(
     pokemon_id: int, pokemon: PokemonPatchInputSchema, db: Session = Depends(get_db)
 ):
@@ -124,10 +106,15 @@ def update_Pokemon_Patch(
         setattr(find_pokemon, key, value)
 
     db.commit()
+    db.refresh(find_pokemon)
     return find_pokemon
 
 
-@app.delete("/pokemon/{pokemon_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/pokemon/{pokemon_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(role_checker([UserRole.admin]))],
+)
 def delete_Pokemon(pokemon_id: int, db: Session = Depends(get_db)):
     find_pokemon = (
         db.query(models.PokemonData).filter(models.PokemonData.id == pokemon_id).first()
@@ -143,9 +130,13 @@ def delete_Pokemon(pokemon_id: int, db: Session = Depends(get_db)):
     return None
 
 
-@app.post("/pokemon/load")
+@router.post("/pokemon/load", dependencies=[Depends(role_checker([UserRole.admin]))])
 def fetch_and_store(db: Session = Depends(get_db)):
     response = requests.get("https://coralvanda.github.io/pokemon_data.json")
+    if response.status_code != 200:
+        raise HTTPException(
+            status_code=response.status_code, detail="Failed to load data."
+        )
     data = response.json()
 
     print(f"Data fetched: {len(data)} entries")
@@ -155,7 +146,6 @@ def fetch_and_store(db: Session = Depends(get_db)):
     for pokemon in data:
         # Map the API data fields to the database model fields
         pokemon_dict = {
-            "id": current_id,
             "name": pokemon["Name"],
             "type_1": pokemon["Type 1"],
             "type_2": pokemon.get("Type 2", None),  # Handle optional type_2 field
@@ -170,7 +160,7 @@ def fetch_and_store(db: Session = Depends(get_db)):
             "legendary": pokemon["Legendary"],
         }
         pokemon_list.append(pokemon_dict)
-        current_id += 1  # Increment the ID for the next Pokémon
+        # current_id += 1  # Increment the ID for the next Pokémon
 
     # Perform bulk insert using bulk_insert_mappings
     try:
@@ -186,14 +176,17 @@ def fetch_and_store(db: Session = Depends(get_db)):
     }
 
 
-@app.get(
+@router.get(
     "/pokemon/",
     response_model=List[PokemonGetOutputSchema],
     status_code=status.HTTP_200_OK,
+    dependencies=[
+        Depends(role_checker([UserRole.admin, UserRole.user, UserRole.moderator]))
+    ],
 )
 def get_all_pokemon(
     db: Session = Depends(get_db),
-    sort_order: Literal["asc", "desc"]= Query(
+    sort_order: Literal["asc", "desc"] = Query(
         "asc", description="Order by Ascending or Descending (asc/desc)"
     ),
     search_column: Optional[str] = Query("name", description="Column to search in"),
@@ -219,6 +212,8 @@ def get_all_pokemon(
                 status_code=400, detail=f"Invalid column name: {search_column}"
             )
         query = query.filter(column_to_search.ilike(f"%{keyword}%"))
+
+    # need to add else condition for string
 
     # Apply sorting
     query = query.order_by(order_by)

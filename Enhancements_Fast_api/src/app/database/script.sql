@@ -19,9 +19,13 @@ CREATE TABLE pokemon_data_test (
 );
 
 -- pokemon_table_insert.sql
-INSERT INTO pokemon_roster (name, type_1, type_2, total, hp, attack, defense, sp_atk, sp_def, speed, generation, legendary)
+INSERT INTO pokpokemon_data_test(name, type_1, type_2, total, hp, attack, defense, sp_atk, sp_def, speed, generation, legendary)
 VALUES
     ('Charmander', 'Fire', NULL, 309, 39, 52, 43, 60, 50, 65, 1, false),
     ('Squirtle', 'Water', NULL, 314, 44, 48, 65, 50, 64, 43, 1, false),
     ('Articuno', 'Ice', 'Flying', 580, 90, 85, 100, 95, 125, 85, 1, true);
 
+-- pokemon_table_delete_by_id.sql
+DELETE FROM pokemon_data_test WHERE id = 1;
+DELETE FROM pokemon_data_test WHERE name = 'Charmander';
+DELETE FROM pokemon_data_test WHERE type_2 = 'Flying';

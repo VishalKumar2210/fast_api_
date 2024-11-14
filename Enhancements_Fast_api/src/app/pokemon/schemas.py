@@ -1,8 +1,6 @@
+from typing import List, Optional
+
 from pydantic import BaseModel, Field
-from typing import Optional, List
-from models import UserRole
-from datetime import datetime
-import models
 
 
 # Base schema for Pydantic models
@@ -22,7 +20,7 @@ class PokemonPostPutInputSchema(BaseModel):
     defense: int
     sp_atk: int
     sp_def: int
-    speed: int = Field(lt=200, gt=4)
+    speed: int = Field(lt=200, gt=0)
     generation: int = Field(lt=7, gt=0, default=2)
     legendary: bool
 
@@ -37,7 +35,7 @@ class PokemonPatchInputSchema(BaseModel):
     defense: Optional[int]
     sp_atk: Optional[int]
     sp_def: Optional[int]
-    speed: Optional[int] = Field(lt=200, gt=4)
+    speed: Optional[int] = Field(lt=200, gt=0)
     generation: Optional[int] = Field(lt=7, gt=0, default=2)
     legendary: Optional[bool]
 
@@ -58,6 +56,9 @@ class PokemonGetOutputSchema(BaseModel):
     generation: int
     legendary: bool
 
+    class Config:
+        orm_mode = True
+
 
 class PokemonGetAllOutputSchema(List[PokemonGetOutputSchema]):
     pass
@@ -65,31 +66,3 @@ class PokemonGetAllOutputSchema(List[PokemonGetOutputSchema]):
 
 class PokemonPostPatchPutOutputSchema(PokemonGetOutputSchema):
     pass
-
-
-class UserCreate(BaseModel):
-    username: str
-    password: str
-    role: Optional[models.UserRole] = UserRole.user  # Role should be either 'admin' or 'user'
-    is_active: Optional[bool] = True
-
-
-# Schema for showing user data
-class UserResponse(BaseModel):
-    id: int
-    username: str
-    role: models.UserRole
-    created_at: datetime
-    updated_at: datetime
-
-
-class UserUpdate(BaseModel):
-    is_active: bool
-    role: models.UserRole
-
-
-# Schema for login
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-    role: UserRole
